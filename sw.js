@@ -1,5 +1,5 @@
 /* بيتي — Service Worker. The version below is filled in automatically by build.py */
-const VERSION = '4.0.0-r3';
+const VERSION = '4.2.0-r5';
 const CACHE = 'bayti-' + VERSION;
 const ASSETS = ['./', './index.html', './manifest.json', './content.json', './icon-192.png', './icon-512.png'];
 
