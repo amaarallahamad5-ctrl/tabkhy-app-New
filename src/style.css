@@ -613,3 +613,82 @@ select.inp{appearance:none;-webkit-appearance:none}
 /* a running timer pill sits above the header instead of covering its buttons */
 .app{transition:padding-top .25s}
 body.pill-on .app{padding-top:calc(62px + var(--safe-t))}
+
+/* ================= v4.3 items & stock ================= */
+#shopPane[hidden],#stockPane[hidden],.add-prev[hidden],.cat-pick[hidden]{display:none!important}
+.segc{font-size:12px;background:var(--bg);border-radius:99px;padding:0 7px;margin-inline-start:4px;font-weight:800}
+.segc:empty{display:none}
+.seg button.on .segc{background:var(--card)}
+.add-prev{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:10px 2px 0;font-size:14px}
+.ap-cat{background:var(--sage-l);color:var(--sage-d);border-radius:99px;padding:4px 12px;font-weight:800}
+.ap-cat.unsure{background:var(--peach-l);color:var(--peach-d)}
+.ap-q{background:var(--sky-l);color:var(--sky-d);border-radius:99px;padding:4px 10px;font-weight:800}
+.ap-note{color:var(--muted);font-weight:600}
+.ap-ch{margin-inline-start:auto;color:var(--sky-d);font-weight:800;font-size:14px;padding:4px 6px;text-decoration:underline}
+.cat-pick{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;max-height:210px;overflow-y:auto;padding:2px}
+.cat-pick .mini{height:36px;font-size:13px;background:var(--bg)}
+.cat-pick .mini.on{background:var(--sage-l);border-color:var(--sage)}
+.shop-item .name{min-width:0}
+.shop-item .qb{display:inline-block;background:var(--sky-l);color:var(--sky-d);border-radius:99px;padding:0 9px;font-size:13px;font-weight:800;margin-inline-start:4px}
+.shop-item .for{display:block;color:var(--muted);font-size:12px;font-weight:600;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shop-item .pr{font-size:13px;font-weight:800;color:var(--muted);white-space:nowrap}
+.shop-item .ed{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:15px;opacity:.65;flex-shrink:0}
+.shop-item.done .qb{background:var(--bg)}
+.shop-est{background:var(--sky-l);color:var(--sky-d);border-radius:14px;padding:8px 12px;font-weight:800;font-size:14px;margin:-2px 0 10px}
+.shop-foot{text-align:center;color:var(--muted);font-size:14px;margin-top:14px}
+.chip.need[title^="صنف"]{background:#FFF1B8}
+/* stock */
+.stock-sum{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px}
+.ss-n{background:var(--card);border-radius:16px;padding:10px 8px;box-shadow:var(--shadow);text-align:center;display:flex;flex-direction:column;align-items:center}
+.ss-n b{font-size:24px;font-weight:800;color:var(--sage-d)}
+.ss-n small{font-size:12px;color:var(--muted);font-weight:700}
+.ss-n.warn b{color:var(--peach-d)}
+.ss-n.go{background:var(--sage-l)}
+.st-cat{margin-bottom:6px}
+.st-row{display:flex;align-items:center;gap:6px;background:var(--card);border-radius:14px;padding:6px 8px 6px 6px;box-shadow:var(--shadow);margin-bottom:6px;min-height:52px}
+.st-row.out{opacity:.8;background:var(--bg);box-shadow:none;border:1.5px dashed var(--line)}
+.st-n{flex:1;min-width:0;text-align:right;font-weight:700;font-size:16px;padding:6px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-n i{font-style:normal;font-size:13px}
+.st-b{width:38px;height:38px;border-radius:11px;background:var(--bg);font-size:22px;font-weight:800;color:var(--sage-d);flex-shrink:0}
+.st-b:active{transform:scale(.9)}
+.st-q{min-width:64px;text-align:center;font-weight:800;font-size:14px;color:var(--ink)}
+.st-add{height:36px;padding:0 12px;border-radius:11px;background:var(--sky-l);color:var(--sky-d);font-weight:800;font-size:13px;flex-shrink:0}
+.qs-cat{background:var(--card);border-radius:16px;padding:10px 12px;margin-bottom:8px;box-shadow:var(--shadow)}
+.qs-cat summary{font-weight:800;cursor:pointer;list-style:none;display:flex;gap:6px;align-items:center}
+.qs-cat summary small{color:var(--muted);font-weight:700;margin-inline-start:auto}
+.qs-cat .chip{height:38px;font-size:14px}
+/* meals stock card + generation mode */
+.stock-card{padding:14px;margin-bottom:12px}
+.sc-top{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.sc-e{width:48px;height:48px;border-radius:15px;background:var(--sage-l);display:grid;place-items:center;font-size:26px;flex-shrink:0}
+.sc-t b{display:block;font-size:17px}
+.sc-t small{color:var(--muted);font-weight:600;font-size:13px}
+.gen-mode{margin-bottom:10px}
+.gen-mode button{height:40px;font-size:14px}
+/* cooking ideas */
+.ci-hint{color:var(--muted);font-weight:600;font-size:14px;margin:2px 4px 10px}
+.ci-card{display:flex;align-items:center;gap:10px;background:var(--card);border-radius:16px;padding:10px;box-shadow:var(--shadow);margin-bottom:8px;border:2px solid transparent;transition:border .2s}
+.ci-card.sel{border-color:var(--sage);background:var(--sage-l)}
+.ci-e{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;font-size:22px;flex-shrink:0}
+.ci-t{flex:1;min-width:0;text-align:right}
+.ci-t b{display:block;font-size:16px}
+.ci-t small{display:block;color:var(--muted);font-weight:600;font-size:12px}
+.ci-miss{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.ci-miss i{font-style:normal;background:var(--peach-l);color:var(--peach-d);border-radius:99px;padding:1px 9px;font-size:12px;font-weight:800}
+.ci-act{width:40px;height:40px;border-radius:12px;background:var(--bg);font-size:18px;flex-shrink:0}
+.ci-sel{width:30px;height:30px;border-radius:9px;border:2px solid var(--sage);color:#fff;font-weight:800;flex-shrink:0;display:grid;place-items:center}
+.ci-card.sel .ci-sel{background:var(--sage-d);border-color:var(--sage-d)}
+.ci-bar{background:var(--card);border-radius:18px 18px 0 0;padding:12px 4px 14px;margin-top:8px;box-shadow:0 -8px 20px rgba(0,0,0,.08)}
+.ci-bar>b{display:block;font-size:15px;margin:0 6px 6px}
+.ci-need{list-style:none;padding:0;margin:0 0 10px;max-height:150px;overflow-y:auto}
+.ci-need li{display:flex;justify-content:space-between;gap:8px;padding:5px 8px;border-bottom:1px dashed var(--line);font-weight:700}
+.ci-need li small{color:var(--muted);font-weight:600;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+/* cooking mode: what ran out */
+.ck-used{background:var(--card);border-radius:18px;padding:14px;margin-bottom:12px;text-align:right;box-shadow:var(--shadow)}
+.ck-used b{display:block}
+.ck-used small{color:var(--muted);font-weight:600;font-size:13px}
+.chip.out-on{background:var(--rose-l);border-color:var(--rose-d);text-decoration:line-through}
+.chip.more{background:transparent;color:var(--sky-d);font-weight:800;text-decoration:underline}
+#ciBar{position:sticky;bottom:calc(-24px - var(--safe-b));z-index:3;margin:0 -8px}
+.st-n i{margin-inline-end:4px}
+#shopSeg button{white-space:nowrap;font-size:15px}

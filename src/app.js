@@ -11,7 +11,7 @@ const NATIVE = typeof window.BaytiAndroid === 'object' && !!window.BaytiAndroid;
 let C = CONTENT_DEFAULT;
 try { const cc = JSON.parse(localStorage.getItem(CKEY)); if (cc && cc.rev > C.rev) C = Object.assign({}, CONTENT_DEFAULT, cc); } catch(e){}
 let PANTRY_ALL = [];
-function indexContent(){ PANTRY_ALL = C.pantry.flatMap(g=>g.items); }
+function indexContent(){ PANTRY_ALL = C.pantry.flatMap(g=>g.items); CAT_IDX = null; }
 indexContent();
 
 const MEALS_NORMAL = [
@@ -44,7 +44,7 @@ const fresh = () => ({
   shop:[], exp:{}, cur:'ج.م', limit:0, seen:false, affShift:0, affDay:'', ver:'',
   name:'', members:[], onboarded:false, theme:'auto', ramadan:false, fav:[], myRecipes:[],
   bills:[], goals:[], monthBudget:0, ach:{}, cnt:{}, hist:{}, best:0,
-  fixed:{}, timers:[], cl:{}, myCl:[], notes:[], expiry:[], contacts:[], cooked:[]
+  fixed:{}, timers:[], cl:{}, myCl:[], notes:[], expiry:[], contacts:[], cooked:[], stock:{}, itemCat:{}, prices:{}, genMode:'stock'
 });
 const HAD_DATA = !!load();
 let S = Object.assign(fresh(), load() || {});
@@ -193,7 +193,7 @@ function renderHome(){
   $('#hSpend').textContent = money(sum);
   $('#hSpendS').textContent = list.length ? plural(list.length,'عملية واحدة','عمليتان','عمليات','عملية') : 'لا مصاريف اليوم';
   $('#hSpendM').textContent = `الشهر: ${money(monthTotal(ym()))}`;
-  renderHomeV4(); renderHomeV42();
+  renderHomeV4(); renderHomeV42(); renderHomeV43();
   const m = S.meals[today()]||{};
   $('#hMeals').innerHTML = MEALS.map(x=>`<div>${x.e} <span style="opacity:.7">${x.n}:</span> ${m[x.k]?esc(m[x.k]):'<span style="opacity:.5">لم تُحدد بعد</span>'}</div>`).join('');
   const left = S.shop.filter(i=>!i.done).length;
@@ -368,7 +368,7 @@ $('#genSheet').addEventListener('click', e=>{
   const csv = e.target.closest('[data-csv]'); if (csv){ exportCSV(); return; }
   const rs = e.target.closest('[data-recipe]'); if (rs){ openRecipe(rs.dataset.recipe); return; }
   const ms = e.target.closest('[data-addmiss]');
-  if (ms){ const n = addToShop(ms.dataset.addmiss.split('|')); toast(n ? `أضيف ${ar(n)} للقائمة 🛒` : 'موجودة بالفعل في القائمة'); updateBadge(); return; }
+  if (ms){ const n = addToShop(ms.dataset.addmiss.split('|'), ms.dataset.r ? {r:ms.dataset.r} : {}); toast(n ? `أضيف ${ar(n)} للقائمة 🛒` : 'موجودة بالفعل في القائمة'); updateBadge(); return; }
   const use = e.target.closest('[data-use]');
   if (use){ const [k,name] = use.dataset.use.split('|'); setMeal(mKey,k,name); close('#genOv'); go('meals'); toast(`تم وضعها في ${MEALS.find(x=>x.k===k).n} ${relDay(mKey)}`); }
 });
@@ -402,7 +402,7 @@ function renderMeals(){
       ${r?`<button class="info" data-recipe="${esc(r.n)}" aria-label="طريقة التحضير"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2z"/><path d="M8 7h6M8 11h6"/></svg></button>`:''}
     </div>`;}).join('');
   $('#missToShop').hidden = !anyMiss;
-  renderPantry();
+  renderPantry(); renderGenMode();
 }
 let mealTimer;
 $('#mealList').addEventListener('input', e=>{
@@ -415,10 +415,14 @@ $('#mPrev').onclick = () => { mKey = addDays(mKey,-1); renderMeals(); };
 $('#mNext').onclick = () => { mKey = addDays(mKey,1); renderMeals(); };
 function pick(type, avoid = []){
   const scored = allRecipes(type).map(r=>({r, miss: missingOf(r).length}));
-  const pool = scored.filter(x=>!avoid.includes(x.r.n));
+  const mode = S.genMode||'stock';
+  let pool = scored.filter(x=>!avoid.includes(x.r.n));
+  let modePool = pool.filter(x=> mode==='stock' ? x.miss===0 : x.miss>=1 && x.miss<=3);
+  if (!modePool.length && mode==='stock') modePool = scored.filter(x=>x.miss===0);   // repeat a ready meal rather than need shopping
+  if (modePool.length) pool = modePool;
   const src = pool.length ? pool : scored;
   const min = Math.min(...src.map(x=>x.miss));
-  const best = src.filter(x=>x.miss===min);
+  const best = mode==='new' && modePool.length ? src : src.filter(x=>x.miss===min);
   const favs = best.filter(x=>S.fav.includes(x.r.n));
   return (favs.length && Math.random()<.55 ? rand(favs) : rand(best)).r;
 }
@@ -443,7 +447,7 @@ $('#genWeek').onclick = () => {
     `<div class="row2" style="margin-top:6px"><button class="btn soft" data-addmiss="${esc(weekMissing(days).join('|'))}" ${weekMissing(days).length?'':'disabled'}>🛒 الناقص للتسوق (${ar(weekMissing(days).length)})</button><button class="btn primary" data-close>تم</button></div>`);
 };
 function weekMissing(days){ const s = new Set(); days.forEach(k=>{ const m = S.meals[k]||{}; MEALS.forEach(x=>{ const r = m[x.k] && findRecipe(m[x.k]); if (r) missingOf(r).forEach(i=>s.add(i)); }); }); return [...s]; }
-$('#missToShop').onclick = () => { const n = addToShop(weekMissing([mKey])); toast(n ? `أضيف ${ar(n)} للقائمة 🛒` : 'موجودة بالفعل في القائمة'); updateBadge(); };
+$('#missToShop').onclick = () => { const m = S.meals[mKey]||{}; let n = 0; MEALS.forEach(x=>{ const r = m[x.k] && findRecipe(m[x.k]); if (r) n += addToShop(missingOf(r), {r:r.n}); }); toast(n ? `أضيف ${ar(n)} للقائمة 🛒` : 'موجودة بالفعل في القائمة'); updateBadge(); };
 function openRecipe(name){
   const r = findRecipe(name); if(!r) return;
   const miss = missingOf(r);
@@ -455,7 +459,7 @@ function openRecipe(name){
     <div id="qtyBox">${qtyHTML(r, r.sv)}</div>
     <div class="pg"><h5>طريقة التحضير</h5><div class="rsteps">${r.s.map(s=>`<div>${esc(s)}</div>`).join('')}</div>${r.t?`<div class="rtip">💡 سر النجاح: ${esc(r.t)}</div>`:''}</div>
     <div class="row2" style="margin-bottom:10px"><button class="btn soft" data-timer="${esc(r.n)}|${r.m}">⏱️ مؤقت ${ar(r.m)} د</button><button class="btn primary cook-btn" data-cook="${esc(r.n)}">👩‍🍳 وضع الطبخ</button></div>
-    <div class="row2">${miss.length?`<button class="btn soft" data-addmiss="${esc(miss.join('|'))}">🛒 أضف الناقص</button>`:(!MEAL_KEYS.includes(r.k) ? `<button class="btn soft" data-fav="${esc(r.n)}">♥ للمفضلة</button>` : `<button class="btn soft" data-use="${r.k}|${esc(r.n)}">📅 استخدمها</button>`)}<button class="btn primary" data-close>تم</button></div>${r.id?`<button class="btn block danger" style="margin-top:10px" data-delrec="${r.id}">حذف وصفتي</button>`:''}`);
+    <div class="row2">${miss.length?`<button class="btn soft" data-addmiss="${esc(miss.join('|'))}" data-r="${esc(r.n)}">🛒 أضف الناقص</button>`:(!MEAL_KEYS.includes(r.k) ? `<button class="btn soft" data-fav="${esc(r.n)}">♥ للمفضلة</button>` : `<button class="btn soft" data-use="${r.k}|${esc(r.n)}">📅 استخدمها</button>`)}<button class="btn primary" data-close>تم</button></div>${r.id?`<button class="btn block danger" style="margin-top:10px" data-delrec="${r.id}">حذف وصفتي</button>`:''}`);
 }
 let browseFilter = 'all';
 $('#browseBtn').onclick = () => {
@@ -479,36 +483,24 @@ function renderBrowse(){
   $('#browseList').innerHTML = html || `<div class="empty"><span class="e">🔍</span>لا توجد وصفات مطابقة</div>`;
 }
 $('#addRecipeBtn').onclick = () => openAddRecipe();
-function renderPantry(){
-  $('#pantryCount').textContent = `(${ar(S.pantry.length)} متوفر)`;
-  $('#pantryChips').innerHTML = C.pantry.map(g=>`<div class="pg"><h5>${g.e} ${g.g}</h5><div class="chips" style="margin-top:0">${g.items.map(p=>`<button class="chip ${S.pantry.includes(p)?'on':''}" data-p="${esc(p)}">${esc(p)}</button>`).join('')}</div></div>`).join('');
-}
-$('#pantryChips').addEventListener('click', e=>{
-  const c = e.target.closest('[data-p]'); if(!c) return;
-  const p = c.dataset.p; S.pantry = S.pantry.includes(p) ? S.pantry.filter(x=>x!==p) : [...S.pantry,p];
-  save(); buzz(6);
-  const open = $('#pantryBox').open; renderMeals(); $('#pantryBox').open = open;
-});
 
 /* ---------- SHOP ---------- */
-function addToShop(names){
-  let n = 0;
-  names.forEach(nm=>{ nm = nm.trim(); if (!nm) return; const ex = S.shop.find(i=>i.n===nm); if (ex){ if (ex.done){ ex.done=false; n++; } return; } S.shop.unshift({id:uid(), n:nm, done:false}); n++; });
-  save(); return n;
-}
 function updateBadge(){ const n = S.shop.filter(i=>!i.done).length; const b = $('#shopBadge'); b.hidden = !n; b.textContent = n>9?'+٩':ar(n); }
 function renderShop(){
   const left = S.shop.filter(i=>!i.done), got = S.shop.filter(i=>i.done);
   $('#shopCount').textContent = left.length ? `(${ar(left.length)})` : '';
-  const row = i => `<div class="shop-item ${i.done?'done':''}" data-s="${i.id}">${CHECK_SVG}<span class="name">${esc(i.n)}</span><button class="del" style="display:grid" data-sdel="${i.id}" aria-label="حذف">${X_SVG}</button></div>`;
+  const row = shopRow;
   $('#shopList').innerHTML = S.shop.length ? shopGrouped(left, row) + (got.length?`<div class="group-h">✓ تم شراؤه (${ar(got.length)})</div>`+got.map(row).join('')+`<button class="btn soft block shop-exp" data-shopexp>💰 سجّل المشتريات كمصروف</button>`:'')
     : `<div class="card empty"><span class="e">🛒</span>القائمة فارغة — أضف ما تحتاجه أو اختر من الاقتراحات</div>`;
   const inList = new Set(S.shop.filter(i=>!i.done).map(i=>i.n));
   const need = weekMissing(Array.from({length:7},(_,i)=>addDays(today(),i))).filter(x=>!inList.has(x));
-  const quick = C.quickShop.filter(x=>!inList.has(x) && !need.includes(x));
-  $('#shopSugg').innerHTML = need.map(x=>`<button type="button" class="chip add need" data-q="${esc(x)}" title="ناقص لوجباتك">${esc(x)}</button>`).join('') + quick.map(x=>`<button type="button" class="chip add" data-q="${esc(x)}">${esc(x)}</button>`).join('');
+  const outS = staplesOut().filter(x=>!inList.has(x) && !need.includes(x));
+  const quick = C.quickShop.filter(x=>!inList.has(x) && !need.includes(x) && !outS.includes(x) && !inStock(x));
+  $('#shopSugg').innerHTML = outS.map(x=>`<button type="button" class="chip add need" data-q="${esc(x)}" title="صنف أساسي خلص">⭐ ${esc(x)}</button>`).join('') + need.slice(0, shopSuggAll ? 99 : 8).map(x=>`<button type="button" class="chip add need" data-q="${esc(x)}" title="ناقص لوجباتك">${esc(x)}</button>`).join('') + quick.slice(0, shopSuggAll ? 99 : Math.max(4, 12 - outS.length - need.length)).map(x=>`<button type="button" class="chip add" data-q="${esc(x)}">${esc(x)}</button>`).join('') + (!shopSuggAll && (need.length > 8 || quick.length > Math.max(4, 12 - outS.length - need.length)) ? `<button type="button" class="chip more" data-qmore>المزيد…</button>` : '');
   $('#clearShop').hidden = !got.length; $('#shareShop').hidden = !left.length;
   updateBadge();
+  $('#shopCountSeg').textContent = left.length ? ar(left.length) : ''; $('#stockCount').textContent = ar(S.pantry.length);
+  const est = shopEstimate(); $('#shopEst').hidden = !est.n; $('#shopEst').textContent = est.n ? `💰 التكلفة التقديرية ≈ ${money(est.sum)}${est.n<est.of?` (لـ${ar(est.n)} من ${ar(est.of)} أصناف)`:''}` : '';
 }
 $('#shopForm').onsubmit = e => { e.preventDefault(); const v = $('#shopInp').value; if(!v.trim()) return; const n = addToShop(v.split(/[،,\n]+/).reverse()); $('#shopInp').value=''; renderShop(); buzz(8); if(!n) toast('موجود بالفعل في القائمة'); };
 $('#shopSugg').onclick = e => { const b = e.target.closest('[data-q]'); if(!b) return; addToShop([b.dataset.q]); renderShop(); buzz(6); };
@@ -516,12 +508,13 @@ $('#shopList').addEventListener('click', e=>{
   const d = e.target.closest('[data-sdel]'); if (d){ const it = S.shop.find(i=>i.id===d.dataset.sdel); undoable(`تم حذف «${it?it.n:''}»`, ()=>{ S.shop = S.shop.filter(i=>i.id!==d.dataset.sdel); }); return; }
   const el = e.target.closest('[data-s]'); if(!el) return;
   const it = S.shop.find(i=>i.id===el.dataset.s); it.done = !it.done;
-  if (it.done){ buzz(12); inc('bought'); checkAch(); if (PANTRY_ALL.includes(it.n) && !S.pantry.includes(it.n)){ S.pantry.push(it.n); toast(`«${it.n}» أضيف إلى مخزون المطبخ 🧺`); } }
+  if (it.done){ buzz(12); inc('bought'); checkAch(); const isNew = onBought(it); if (isNew || it.q) toast(isNew ? `«${it.n}» انتقل إلى المخزون${it.q?` (${qtyTxt(it.q,it.u)})`:''} 🧺` : `زاد مخزون «${it.n}» ${qtyTxt(it.q,it.u)} 🧺`); }
+  else onUnbought(it);
   save(); el.classList.toggle('done', it.done); setTimeout(renderShop, 350);
 });
 $('#clearShop').onclick = () => { const n = S.shop.filter(i=>i.done).length; undoable(`تم حذف ${ar(n)} من المشترى`, ()=>{ S.shop = S.shop.filter(i=>!i.done); }); };
 $('#shareShop').onclick = async () => {
-  const text = '🛒 قائمة التسوق — بيتي\n\n' + S.shop.filter(i=>!i.done).map(i=>'▫️ '+i.n).join('\n');
+  const text = shareText();
   if (NATIVE) { BaytiAndroid.shareText(text); return; }
   try { if (navigator.share) { await navigator.share({title:'قائمة التسوق', text}); return; } } catch(e){ if (e.name==='AbortError') return; }
   try { await navigator.clipboard.writeText(text); toast('تم نسخ القائمة — الصقها في واتساب 📋'); }
@@ -781,7 +774,9 @@ const ACH = [
   ['recipe','✍️','وصفة البيت','أضف وصفتك الخاصة', ()=>S.myRecipes.length>=1],
   ['fav','❤️','ذوق خاص','أضف ٥ وصفات للمفضلة', ()=>S.fav.length>=5],
   ['cookm','👩‍🍳','شيف وضع الطبخ','أكمل ٥ وصفات بوضع الطبخ', ()=>cnt('cooked')>=5],
-  ['sos','📞','مستعد دائماً','احفظ ٣ أرقام مهمة', ()=>(S.contacts||[]).length>=3]
+  ['sos','📞','مستعد دائماً','احفظ ٣ أرقام مهمة', ()=>(S.contacts||[]).length>=3],
+  ['stock','🧺','مخزن منظم','سجّل ٣٠ صنفاً في المخزون', ()=>S.pantry.length>=30],
+  ['ideas','💡','مغامر في المطبخ','اجمع ناقص أكلة من «أفكار جديدة»', ()=>cnt('ideas')>=1]
 ];
 function checkAch(silent){
   const fresh = [];
@@ -1639,6 +1634,7 @@ function renderCook(){
       ${i===r.s.length && r.t?`<div class="rtip">💡 سر النجاح: ${esc(r.t)}</div>`:''}`;
   } else {
     body = `<div class="ck-done"><div class="e">🎉</div><h3>بالهنا والشفا!</h3><p>انتهيت من «${esc(r.n)}»</p>
+      ${r.i.filter(inStock).length?`<div class="ck-used"><b>🫙 هل خلص شيء من المكونات؟</b><small>اختره ليُحدَّث المخزون${S.staples.length?'، والأساسي يُضاف للتسوق':''}</small><div class="chips">${r.i.filter(inStock).map(x=>`<button class="chip ${cook.out&&cook.out[x]?'out-on':''}" data-cout="${esc(x)}">${esc(x)}</button>`).join('')}</div></div>`:''}
       <button class="btn soft block" data-cfav>${S.fav.includes(r.n)?'❤️ في المفضلة':'♥ أضفها للمفضلة'}</button></div>`;
   }
   $('#cookBox').innerHTML = `<div class="ck-top"><button class="ck-x" data-cclose aria-label="إغلاق">✕</button><div class="ck-title"><b>${esc(r.n)}</b><small>👩‍🍳 وضع الطبخ — الشاشة تبقى مضاءة</small></div></div>${prog}
@@ -1648,13 +1644,15 @@ function renderCook(){
 cookOv.addEventListener('click', e=>{
   const g = s => e.target.closest(s); let b;
   if (g('[data-cclose]')){ closeCook(); return; }
+  if ((b = g('[data-cout]'))){ cook.out = cook.out||{}; const x = b.dataset.cout; cook.out[x] = !cook.out[x]; b.classList.toggle('out-on', cook.out[x]); buzz(6); return; }
   if ((b = g('[data-cg]'))){ const j = +b.dataset.cg; cook.got[j] = !cook.got[j]; buzz(6); renderCook(); return; }
   if ((b = g('[data-cstep]'))){ cook.i = Math.max(0, Math.min(cook.r.s.length+1, cook.i + (+b.dataset.cstep))); buzz(8); renderCook(); $('#cookBox').scrollTop = 0; return; }
   if ((b = g('[data-ctimer]'))){ ensureAudio(); startTimer(`${cook.r.n} — خطوة ${ar(cook.i)}`, +b.dataset.ctimer, '🍳'); b.textContent = '✓ المؤقت يعمل في أعلى الشاشة'; b.disabled = true; return; }
   if (g('[data-cfav]')){ const n = cook.r.n; if (!S.fav.includes(n)) S.fav.push(n); save(); renderCook(); toast('أضيفت إلى المفضلة ❤️'); return; }
   if (g('[data-cfinish]')){
-    const n = cook.r.n; S.cooked = (S.cooked||[]).concat({n, k:today()}).slice(-60); inc('cooked'); save();
-    closeCook(); toast('بالهنا والشفا 😋'); checkAch(); render();
+    const n = cook.r.n; S.cooked = (S.cooked||[]).concat({n, k:today()}).slice(-60); inc('cooked');
+    const outs = Object.keys(cook.out||{}).filter(x=>cook.out[x]); let toShop = 0; outs.forEach(x=>{ stockOut(x); if (S.staples.includes(x)) toShop += addToShop([x]); }); save();
+    closeCook(); toast(outs.length ? `بالهنا والشفا 😋 — حُدّث المخزون${toShop?` وأضيف ${ar(toShop)} للتسوق`:''}` : 'بالهنا والشفا 😋'); checkAch(); render();
   }
 });
 document.addEventListener('keydown', e=>{ if (!cook) return; if (e.key==='Escape') closeCook(); else if (e.key==='ArrowLeft'){ cook.i = Math.min(cook.r.s.length+1, cook.i+1); renderCook(); } else if (e.key==='ArrowRight'){ cook.i = Math.max(0, cook.i-1); renderCook(); } });
@@ -1699,12 +1697,13 @@ function renderSearch(){
   const lists = (C.checklists||[]).concat(S.myCl||[]).filter(l=>has(l.n) || (l.items||[]).some(has)).map(l=>row(`data-gs="l" data-v="${esc(l.id)}"`, l.e||'📋', l.n, `${ar((l.items||[]).length)} بند`));
   const notes = (S.notes||[]).filter(n=>has(n.t)).map(n=>row(`data-gs="n"`, '📝', n.t.slice(0,60)));
   const cons = (S.contacts||[]).filter(c=>has(c.n) || toEn(c.p).includes(toEn(raw))).map(c=>row(`data-gs="c" data-v="${esc(c.p)}"`, c.e, c.n, c.p));
+  const stk = S.pantry.filter(has).map(n=>row(`data-gs="sk" data-v="${esc(n)}"`, catByK(detectCat(n).k).e, n, `في المخزون${S.stock[n]&&S.stock[n].q?': '+qtyTxt(S.stock[n].q,S.stock[n].u):''}`));
   const exps = [];
   [[S.exp,false],[S.fixed||{},true]].forEach(([box,f])=>Object.keys(box).sort().reverse().forEach(k=>(box[k]||[]).forEach(x=>{
     if (has(x.n||'') || has(catOf(x.c).n) || (/\d/.test(toEn(raw)) && String(x.a).includes(toEn(raw)))) exps.push(row(`data-gs="e" data-v="${x.id}"`, catOf(x.c).e, `${money(x.a)}${x.n?` — ${x.n}`:''}`, `${catOf(x.c).n} — ${f ? 'التزام شهري '+k : relDayFull(k)}`));
   })));
   const evs = S.tasks.filter(t=>t.f && (t.f.t==='o'||t.f.t==='y') && has(t.n)).length;
-  const html = sec('🍲 الوصفات', recs) + sec('📖 دليل البيت', guide) + sec('🧊 حفظ الطعام', store) + sec('✅ المهام والمواعيد', tasks) + sec('📋 القوائم', lists) + sec('📝 الملاحظات', notes) + sec('📞 أرقام مهمة', cons) + sec('💰 المصاريف', exps);
+  const html = sec('🍲 الوصفات', recs) + sec('📖 دليل البيت', guide) + sec('🧊 حفظ الطعام', store) + sec('✅ المهام والمواعيد', tasks) + sec('📋 القوائم', lists) + sec('📝 الملاحظات', notes) + sec('🧺 المخزون', stk) + sec('📞 أرقام مهمة', cons) + sec('💰 المصاريف', exps);
   box.innerHTML = html || `<div class="empty"><span class="e">🔍</span>لا نتائج لـ«${esc(raw)}»</div>`;
   void evs;
 }
@@ -1718,6 +1717,7 @@ $('#genSheet').addEventListener('click', e=>{
   else if (t==='l') openList(v);
   else if (t==='n') openNotes();
   else if (t==='c') dialNum(v);
+  else if (t==='sk') openItemEdit('stock', v);
   else if (t==='e') openExpEdit(v, ()=>openSearch(q));
 }, true);
 
@@ -1759,28 +1759,14 @@ $('#genSheet').addEventListener('click', e=>{
 }, true);
 
 /* ---------- shopping list: sections + log as expense ---------- */
-const SHOP_EXTRA = [['منظفات وأدوات 🧴', ['صابون','كلور','مسحوق','منظف','مناديل','ورق','شامبو','معجون','فرشاة','إسفنج','ليفة','أكياس','ملمع','معطر','بوتاس','سلك','جوانتي','فوط']], ['مخبوزات 🥖', ['عيش','توست','فينو','كرواسون','بقسماط','كيك']], ['مشروبات 🥤', ['مياه','مياة','عصير','بيبسي','كولا','نسكافيه','ينسون','نعناع ناشف']]];
-function shopSection(n){
-  const nn = normAr(n);
-  for (const g of C.pantry) if (g.items.some(i=>normAr(i)===nn || nn.includes(normAr(i)))) return `${g.g} ${g.e}`;
-  for (const [g, words] of SHOP_EXTRA) if (words.some(w=>nn.includes(normAr(w)))) return g;
-  return 'أخرى 🛍️';
-}
-function shopGrouped(items, row){
-  if (items.length < 4) return items.map(row).join('');
-  const order = C.pantry.map(g=>`${g.g} ${g.e}`).concat(SHOP_EXTRA.map(x=>x[0]), ['أخرى 🛍️']);
-  const map = {}; items.forEach(i=>{ const s = shopSection(i.n); (map[s] = map[s]||[]).push(i); });
-  const keys = Object.keys(map).sort((a,b)=>order.indexOf(a)-order.indexOf(b));
-  if (keys.length < 2) return items.map(row).join('');
-  return keys.map(k=>`<div class="shop-sec">${esc(k)} <small>${ar(map[k].length)}</small></div>` + map[k].map(row).join('')).join('');
-}
 function openShopExpense(){
   const got = S.shop.filter(i=>i.done); if (!got.length) return;
   const names = got.map(i=>i.n); let note = 'مشتريات: ' + names.join('، '); if (note.length > 40) note = note.slice(0,38) + '…';
-  const veg = names.filter(n=>shopSection(n).startsWith('خضار')).length, meat = names.filter(n=>shopSection(n).startsWith('لحوم')).length, cln = names.filter(n=>shopSection(n).startsWith('منظفات')).length;
-  const cat = veg > names.length/2 ? 'f' : meat > names.length/2 ? 'm' : cln > names.length/2 ? 'h' : 'g';
+  const ks = got.map(itemCat), most = k => ks.filter(x=>x===k).length > ks.length/2;
+  const cat = (most('veg')||most('fruit')||most('herb')) ? 'f' : (most('meat')||most('poultry')||most('fish')) ? 'm' : (most('clean')||most('paper')) ? 'h' : most('baby') ? 'k' : most('pharm')||most('care') ? 'p' : 'g';
+  const est = got.reduce((s,i)=>s+estOf(i),0);
   formSheet({title:'💰 سجّل المشتريات كمصروف', lead:`${ar(names.length)} صنف: ${esc(names.slice(0,6).join('، '))}${names.length>6?'…':''}`, fields:[
-    {id:'a', label:`المبلغ الإجمالي (${S.cur})`, type:'number', placeholder:'مثال: 350 أو 200+150'},
+    {id:'a', label:`المبلغ الإجمالي (${S.cur})`, type:'number', placeholder:'مثال: 350 أو 200+150', value: est ? String(Math.round(est*100)/100) : ''},
     {id:'n', label:'الملاحظة', value:note, max:40},
     {id:'c', label:'التصنيف', type:'pick', value:cat, options:CATS.filter(c=>c.k!=='b' && c.k!=='s' && c.k!=='i').map(c=>[c.k, `${c.e} ${c.n}`])},
     {id:'clr', label:'بعد الحفظ', type:'pick', value:'y', options:[['y','🧹 احذف المشترى من القائمة'],['n','اتركه في القائمة']]}
@@ -1827,11 +1813,373 @@ $('#searchBtn') && $('#searchBtn').addEventListener('click', ()=>{ buzz(8); open
 if (!S.firstUse){ S.firstUse = HAD_DATA ? addDays(today(), -7) : today(); save(); }
 if (/[?&]qa=1(&|$)/.test(location.search)) window.__bayti = expr => eval(expr);   // automated QA only
 
+/* ================= v4.3 items, stock & cooking ideas ================= */
+/* ---------- catalog: categories, detection, quantities ---------- */
+var CAT_IDX = null;
+var shopSuggAll = false;                      // var: indexContent() may reset it before this block runs
+const OTHER_CAT = {k:'other', n:'أخرى', e:'🛍️', food:false, items:[], kw:[]};
+const CATS_ALL = () => (C.cats||[]).concat([OTHER_CAT]);
+const catByK = k => (C.cats||[]).find(c=>c.k===k) || OTHER_CAT;
+const noAl = s => s.replace(/^ال(?=\S{2,})/,'');
+function buildCatIndex(){
+  CAT_IDX = {items:{}, canon:{}, kw:[]};
+  (C.cats||[]).forEach(c=>{
+    c.items.forEach(i=>{ const n = normAr(i); CAT_IDX.items[n] = c.k; CAT_IDX.canon[noAl(n)] = i; CAT_IDX.canon[n] = i; });
+    (c.kw||[]).concat(c.items).forEach(w=>CAT_IDX.kw.push([normAr(w), c.k]));
+  });
+  Object.entries(C.syn||{}).forEach(([s,t])=>{ CAT_IDX.canon[noAl(normAr(s))] = t; CAT_IDX.canon[normAr(s)] = t; });
+  CAT_IDX.kw.sort((a,b)=>b[0].length-a[0].length);
+}
+const idx = () => CAT_IDX || (buildCatIndex(), CAT_IDX);
+/* "الطماطم" / "فراخ" / "مكرونه" -> the catalog spelling so it matches recipes and the pantry */
+function canon(name){
+  const n = String(name||'').trim().replace(/\s+/g,' '); if (!n) return '';
+  const k = normAr(n), I = idx();
+  return I.canon[k] || I.canon[noAl(k)] || (S.pantry||[]).find(p=>normAr(p)===k) || n;
+}
+/* category of any item: what the user chose before > catalog > keywords > other */
+function detectCat(name){
+  const n = canon(name); if (!n) return {k:'other', sure:false};
+  if (S.itemCat && S.itemCat[n]) return {k:S.itemCat[n], sure:true};
+  const I = idx(), nn = normAr(n);
+  if (I.items[nn]) return {k:I.items[nn], sure:true};
+  const toks = nn.split(/\s+/).map(noAl);
+  for (const [w,k] of I.kw){
+    if (w.length <= 3){ if (toks.some(t=>t===w || (w.length===3 && t.startsWith(w) && t.length<=w.length+2))) return {k, sure:true}; }
+    else if (nn.includes(w)) return {k, sure:true};
+  }
+  return {k:'other', sure:false};
+}
+const itemCat = it => it.g || detectCat(it.n).k;
+const UNITS43 = [['كيلو',['كيلوجرام','كيلو','كجم','كغ','كيلوات']],['جرام',['جرامات','جرام','جم','غرام','غ']],['لتر',['لترات','لتر']],['علبة',['علبة','علبه','علب']],['كيس',['أكياس','اكياس','كيس']],['قطعة',['قطعة','قطعه','قطع','حبة','حبه','حبات']],['زجاجة',['زجاجة','زجاجه','زجاجات','ازازة','إزازة','ازازه']],['باكو',['باكو','باكيت','باكت','بكت']],['كرتونة',['كرتونة','كرتونه','كرتون']],['ربطة',['ربطة','ربطه','حزمة','حزمه']],['طبق',['طبق']],['دستة',['دستة','دسته']]];
+const U_ALIAS = UNITS43.flatMap(([u,al])=>al.map(a=>[a,u])).sort((a,b)=>b[0].length-a[0].length);
+const QW = {'نص':.5,'نصف':.5,'ربع':.25,'تلت':1/3,'ثلث':1/3,'واحد':1,'واحدة':1,'اتنين':2,'اثنين':2,'تلاتة':3,'ثلاثة':3,'اربعة':4,'خمسة':5};
+const digitsEn = s => String(s).replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g,d=>'۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/٫/g,'.');
+/* "٢ كيلو طماطم" | "طماطم ٢ كيلو" | "نص كيلو لحمة" | "بيض ٣٠" | "كيلو رز" -> {n, q, u} */
+function parseItem(txt){
+  let s = digitsEn(txt).replace(/[×x]\s*(\d)/gi,' $1').replace(/\s+/g,' ').trim();
+  const num = '(\\d+(?:[.,]\\d+)?|[½¼¾]|' + Object.keys(QW).join('|') + ')';
+  const unit = '(' + U_ALIAS.map(a=>a[0]).join('|') + ')';
+  const val = v => v==null ? 0 : FRAC[v] || QW[v] || parseFloat(v.replace(',','.'));
+  const uOf = a => a ? (U_ALIAS.find(x=>x[0]===a)||['',''])[1] : '';
+  let m, q = 0, u = '', n = s;
+  if ((m = new RegExp('^'+num+'\\s*'+unit+'?\\s+(?:من\\s+)?(.+)$').exec(s))){ q = val(m[1]); u = uOf(m[2]); n = m[3]; }
+  else if ((m = new RegExp('^(.+?)\\s+'+num+'\\s*'+unit+'?$').exec(s))){ n = m[1]; q = val(m[2]); u = uOf(m[3]); }
+  else if ((m = new RegExp('^'+unit+'\\s+(?:من\\s+)?(.+)$').exec(s))){ q = 1; u = uOf(m[1]); n = m[2]; }
+  else if ((m = new RegExp('^(.+?)\\s+'+unit+'$').exec(s))){ n = m[1]; q = 1; u = uOf(m[2]); }
+  n = n.trim(); if (!n || !isFinite(q) || q<0 || q>100000) return {n:canon(s), q:0, u:''};
+  return {n:canon(n), q:Math.round(q*1000)/1000, u};
+}
+const fmtQ = q => { if (!q) return ''; const w = Math.floor(q), r = Math.round((q-w)*100)/100; const fr = {0.25:'¼',0.5:'½',0.75:'¾'}[r]; return fr ? (w?ar(w):'')+fr : ar(Math.round(q*100)/100); };
+const qtyTxt = (q,u) => q ? `${fmtQ(q)}${u?' '+u:''}` : '';
+const qStep = u => u==='جرام' ? 100 : (u==='كيلو'||u==='لتر') ? .5 : 1;
+
+/* ---------- stock (pantry with quantities) ---------- */
+S.stock = S.stock || {}; S.itemCat = S.itemCat || {}; S.prices = S.prices || {};
+if (!Array.isArray(S.staples)) S.staples = (C.staples||[]).slice();
+const inStock = n => S.pantry.includes(n);
+function stockAdd(name, q, u){
+  const st = S.stock[name] || {q:0, u:''};
+  if (q){ if (!st.u || !u || st.u===u){ st.q = Math.round(((st.q||0)+q)*1000)/1000; st.u = st.u||u||''; } else { st.q = q; st.u = u; } }
+  st.t = Date.now(); S.stock[name] = st;
+  if (!inStock(name)) S.pantry.push(name);
+}
+function stockOut(name){ S.pantry = S.pantry.filter(x=>x!==name); if (S.stock[name]){ S.stock[name].q = 0; } }
+/* shopping list ticked -> stock; un-ticked -> undo exactly what was added */
+function onBought(it){
+  const was = inStock(it.n), before = S.stock[it.n] ? Object.assign({}, S.stock[it.n]) : null;
+  stockAdd(it.n, it.q, it.u); it.sk = {was, before};
+  if (it.p > 0) S.prices[it.n] = {p:it.p, q:it.q||0, u:it.u||'', t:Date.now()};
+  return !was;
+}
+function onUnbought(it){
+  const sk = it.sk; delete it.sk; if (!sk) return;
+  if (!sk.was) S.pantry = S.pantry.filter(x=>x!==it.n);
+  if (sk.before) S.stock[it.n] = sk.before; else delete S.stock[it.n];
+}
+function addToShop(names, opt = {}){
+  let n = 0;
+  names.forEach(raw=>{
+    const p = typeof raw==='string' ? parseItem(raw) : raw; if (!p || !p.n) return;
+    const g = opt.g || p.g || detectCat(p.n).k;
+    const ex = S.shop.find(i=>normAr(i.n)===normAr(p.n));
+    if (ex){ let ch = false; if (ex.done){ ex.done = false; delete ex.sk; ch = true; } if (p.q){ ex.q = p.q; ex.u = p.u; ch = true; } if (opt.r){ ex.r = [...new Set((ex.r||[]).concat(opt.r))]; } if (opt.g) ex.g = opt.g; if (ch) n++; return; }
+    const it = {id:uid(), n:p.n, done:false, g};
+    if (p.q){ it.q = p.q; it.u = p.u||''; }
+    if (opt.r) it.r = [].concat(opt.r);
+    S.shop.unshift(it); n++;
+  });
+  save(); return n;
+}
+const lastPrice = n => (S.prices[n]||{}).p || 0;
+const estOf = it => it.p || lastPrice(it.n);
+
+/* ---------- category chooser shared by the shop and stock forms ---------- */
+const catChooser = (prefix, sel) => `<div class="cat-pick" id="${prefix}Cats" hidden>${CATS_ALL().map(c=>`<button type="button" class="mini ${c.k===sel?'on':''}" data-${prefix}cat="${c.k}">${c.e} ${c.n}</button>`).join('')}</div>`;
+const addState = {shop:{k:null}, stock:{k:null}};
+function renderAddPreview(prefix){
+  const inp = $('#'+prefix+'Inp'), box = $('#'+prefix+'Prev'); if (!inp || !box) return;
+  const v = inp.value.trim(), st = addState[prefix];
+  if (!v || /[،,\n]/.test(v)){ box.innerHTML = v ? `<span class="ap-note">سيُصنَّف كل صنف تلقائياً</span>` : ''; box.hidden = !v; const cp = $('#'+prefix+'Cats'); if (cp) cp.hidden = true; return; }
+  const p = parseItem(v), d = detectCat(p.n), k = st.k || d.k, c = catByK(k);
+  const known = inStock(p.n) && prefix==='stock' ? `<span class="ap-note">موجود في المخزون${S.stock[p.n]&&S.stock[p.n].q?`: ${qtyTxt(S.stock[p.n].q,S.stock[p.n].u)}`:''}</span>` : '';
+  box.hidden = false;
+  box.innerHTML = `<span class="ap-cat ${d.sure||st.k?'':'unsure'}">${c.e} ${c.n}</span>${p.q?`<span class="ap-q">${qtyTxt(p.q,p.u)}</span>`:''}${p.n!==v && !p.q ? `<span class="ap-note">← ${esc(p.n)}</span>`:''}${known}<button type="button" class="ap-ch" data-apch="${prefix}">${d.sure||st.k?'تغيير القسم':'⚠️ صنف جديد — اختر القسم'}</button>`;
+  const cp = $('#'+prefix+'Cats'); if (cp){ cp.querySelectorAll('[data-'+prefix+'cat]').forEach(b=>b.classList.toggle('on', b.dataset[prefix+'cat']===k)); if (!d.sure && !st.k) cp.hidden = false; }
+}
+function takeAdd(prefix){
+  const inp = $('#'+prefix+'Inp'), v = inp.value.trim(); if (!v) return null;
+  const parts = v.split(/[،,\n]+/).map(x=>x.trim()).filter(Boolean), st = addState[prefix];
+  const items = parts.map(x=>{ const p = parseItem(x); const d = detectCat(p.n); p.g = parts.length===1 && st.k ? st.k : d.k; if (parts.length===1 && st.k && st.k!==d.k) S.itemCat[p.n] = st.k; return p; });
+  inp.value = ''; st.k = null; const cp = $('#'+prefix+'Cats'); if (cp) cp.hidden = true; renderAddPreview(prefix);
+  return items;
+}
+function wireAdd(prefix){
+  const inp = $('#'+prefix+'Inp'); if (!inp) return;
+  inp.addEventListener('input', ()=>{ addState[prefix].k = null; renderAddPreview(prefix); });
+  const host = inp.closest('form');
+  host.addEventListener('click', e=>{
+    const ch = e.target.closest('[data-apch]'); if (ch){ const cp = $('#'+prefix+'Cats'); cp.hidden = !cp.hidden; return; }
+    const b = e.target.closest('[data-'+prefix+'cat]'); if (b){ addState[prefix].k = b.dataset[prefix+'cat']; buzz(6); renderAddPreview(prefix); $('#'+prefix+'Cats').hidden = true; inp.focus(); }
+  });
+}
+
+/* ---------- shopping list rendering ---------- */
+function shopRow(i){
+  const q = qtyTxt(i.q, i.u), pr = estOf(i), r = (i.r||[]).slice(0,2);
+  return `<div class="shop-item ${i.done?'done':''}" data-s="${i.id}">${CHECK_SVG}<span class="name">${esc(i.n)}${q?` <span class="qb">${q}</span>`:''}${r.length?`<small class="for">🍳 لـ ${esc(r.join('، '))}${(i.r||[]).length>2?'…':''}</small>`:''}</span>${pr?`<span class="pr">${i.p?'':'≈'}${money(pr)}</span>`:''}<button class="ed" data-sedit="${i.id}" aria-label="تعديل">✏️</button><button class="del" style="display:grid" data-sdel="${i.id}" aria-label="حذف">${X_SVG}</button></div>`;
+}
+function shopGrouped(items, row){
+  if (items.length < 3) return items.map(row).join('');
+  const order = CATS_ALL().map(c=>c.k), map = {};
+  items.forEach(i=>{ const k = itemCat(i); (map[k] = map[k]||[]).push(i); });
+  const keys = Object.keys(map).sort((a,b)=>order.indexOf(a)-order.indexOf(b));
+  if (keys.length < 2) return items.map(row).join('');
+  return keys.map(k=>{ const c = catByK(k); return `<div class="shop-sec">${c.e} ${esc(c.n)} <small>${ar(map[k].length)}</small></div>` + map[k].map(row).join(''); }).join('');
+}
+function shareText(){
+  const left = S.shop.filter(i=>!i.done), order = CATS_ALL().map(c=>c.k), map = {};
+  left.forEach(i=>{ const k = itemCat(i); (map[k] = map[k]||[]).push(i); });
+  return '🛒 قائمة التسوق — بيتي\n' + Object.keys(map).sort((a,b)=>order.indexOf(a)-order.indexOf(b)).map(k=>{ const c = catByK(k); return `\n${c.e} ${c.n}\n` + map[k].map(i=>`▫️ ${i.n}${i.q?` — ${qtyTxt(i.q,i.u)}`:''}`).join('\n'); }).join('\n');
+}
+function shopEstimate(){
+  const left = S.shop.filter(i=>!i.done), priced = left.filter(i=>estOf(i)>0);
+  return {sum: priced.reduce((a,i)=>a+estOf(i),0), n: priced.length, of: left.length};
+}
+
+/* ---------- item edit sheet (shopping item or stock item) ---------- */
+function openItemEdit(kind, key){
+  const isShop = kind==='shop';
+  const it = isShop ? S.shop.find(i=>i.id===key) : null;
+  const name = isShop ? (it && it.n) : key; if (!name) return;
+  const st = S.stock[name] || {}, q = isShop ? (it.q||'') : (st.q||''), u = isShop ? (it.u||'') : (st.u||'');
+  const k = isShop ? itemCat(it) : detectCat(name).k, staple = S.staples.includes(name);
+  const xp = (S.expiry||[]).find(x=>x.n===name);
+  sheet(`<h3>${isShop?'✏️ تعديل الصنف':'🧺 '+esc(name)}</h3><p class="lead">${isShop?'الكمية والقسم والسعر':`${inStock(name)?'✓ متوفر في المخزون':'غير متوفر حالياً'}`}</p>
+    <form id="ief" autocomplete="off">
+      <div class="field"><label for="ie-n">الاسم</label><input class="inp" id="ie-n" style="width:100%" maxlength="40" value="${esc(name)}"></div>
+      <div class="row2"><div class="field"><label for="ie-q">الكمية</label><input class="inp" id="ie-q" style="width:100%" inputmode="decimal" placeholder="مثال: ٢" value="${q?fmtQ(q):''}"></div>
+        <div class="field"><label for="ie-u">الوحدة</label><select class="inp" id="ie-u" style="width:100%"><option value="">—</option>${UNITS43.map(([x])=>`<option ${x===u?'selected':''}>${x}</option>`).join('')}</select></div></div>
+      <div class="field"><label for="ie-c">القسم</label><select class="inp" id="ie-c" style="width:100%">${CATS_ALL().map(c=>`<option value="${c.k}" ${c.k===k?'selected':''}>${c.e} ${c.n}</option>`).join('')}</select></div>
+      ${isShop ? `<div class="field"><label for="ie-p">السعر (${S.cur}) — اختياري</label><input class="inp" id="ie-p" style="width:100%" inputmode="decimal" placeholder="${lastPrice(name)?'آخر مرة: '+money(lastPrice(name)):'مثال: 45'}" value="${it.p||''}"></div>`
+        : `<div class="field"><label for="ie-x">تاريخ الانتهاء — اختياري</label><input class="inp" id="ie-x" type="date" style="width:100%" value="${xp?xp.k:''}"></div>`}
+      <button type="button" class="chip ${staple?'on':''}" id="ie-s" style="margin:4px 0 12px">⭐ صنف أساسي (نبّهني عندما يخلص)</button>
+      <div class="row2"><button type="button" class="btn ghost" data-close>إلغاء</button><button type="submit" class="btn primary">حفظ</button></div>
+      ${isShop ? '' : `<div class="row2" style="margin-top:10px">${inStock(name)?`<button type="button" class="btn soft" data-ieout>خلص 🫙</button>`:`<button type="button" class="btn soft" data-iein>متوفر ✓</button>`}<button type="button" class="btn soft" data-ieshop>🛒 للتسوق</button></div>`}
+    </form>`);
+  const f = $('#ief');
+  $('#ie-s').onclick = e=>{ e.currentTarget.classList.toggle('on'); buzz(6); };
+  f.addEventListener('click', e=>{
+    if (e.target.closest('[data-ieout]')){ stockOut(name); save(); close('#genOv'); render(); toast(`«${name}» خلص`, {label:'🛒 للتسوق', fn:()=>{ addToShop([name]); render(); }}); return; }
+    if (e.target.closest('[data-iein]')){ stockAdd(name, 0, ''); save(); close('#genOv'); render(); toast('أصبح متوفراً ✓'); return; }
+    if (e.target.closest('[data-ieshop]')){ const n = addToShop([name]); close('#genOv'); render(); toast(n?'أضيف لقائمة التسوق 🛒':'موجود بالفعل في القائمة'); }
+  });
+  f.onsubmit = e=>{
+    e.preventDefault();
+    const nn = canon($('#ie-n').value) || name, qq = parseAmount($('#ie-q').value) || 0, uu = $('#ie-u').value, kk = $('#ie-c').value;
+    if (qq < 0 || qq > 100000) { toast('الكمية غير صحيحة'); return; }
+    if (kk !== detectCat(nn).k || S.itemCat[nn]) S.itemCat[nn] = kk;
+    const star = $('#ie-s').classList.contains('on');
+    S.staples = S.staples.filter(x=>x!==name && x!==nn); if (star) S.staples.push(nn);
+    if (isShop){
+      it.n = nn; it.g = kk; if (qq){ it.q = qq; it.u = uu; } else { delete it.q; delete it.u; }
+      const pp = parseAmount($('#ie-p').value); if (pp > 0) it.p = Math.round(pp*100)/100; else delete it.p;
+    } else {
+      if (nn !== name){ S.pantry = S.pantry.map(x=>x===name?nn:x); S.stock[nn] = S.stock[name]||{}; delete S.stock[name]; }
+      const s2 = S.stock[nn] = S.stock[nn] || {}; s2.q = qq; s2.u = qq ? uu : ''; s2.t = Date.now();
+      if (!inStock(nn)) S.pantry.push(nn);
+      const xd = $('#ie-x').value; S.expiry = S.expiry || [];
+      const ex = S.expiry.find(x=>x.n===name);
+      if (xd){ if (ex){ ex.k = xd; ex.n = nn; } else S.expiry.push({id:uid(), n:nn, k:xd}); }
+      else if (ex) S.expiry = S.expiry.filter(x=>x!==ex);
+    }
+    save(); close('#genOv'); render(); toast('تم الحفظ ✓');
+  };
+}
+
+/* ---------- stock pane ---------- */
+let shopView = 'list', stockFilter = 'all';
+function setShopView(v){
+  shopView = v; $('#shopPane').hidden = v!=='list'; $('#stockPane').hidden = v!=='stock';
+  $$('#shopSeg [data-sv]').forEach(b=>b.classList.toggle('on', b.dataset.sv===v));
+  if (v==='stock') renderStock(); else renderShop();
+}
+const staplesOut = () => S.staples.filter(n=>!inStock(n));
+function readyRecipes(){ return RGROUPS.flatMap(g=>allRecipes(g.k).map(r=>Object.assign({k:g.k}, r))).filter(r=>!missingOf(r).length); }
+function renderStock(){
+  if (!$('#stockList')) return;
+  const out = staplesOut(), ready = readyRecipes().length;
+  $('#stockSum').innerHTML = `<div class="ss-n"><b>${ar(S.pantry.length)}</b><small>صنف متوفر</small></div><div class="ss-n ${out.length?'warn':''}"><b>${ar(out.length)}</b><small>أساسي ناقص</small></div><button class="ss-n go" data-cookideas><b>${ar(ready)}</b><small>وصفة تقدر تطبخها ←</small></button>`;
+  const F = [['all','الكل'],['food','🍳 المطبخ'],['home','🧴 البيت'],['star','⭐ الأساسيات'],['out',`⚠️ ناقص${out.length?` (${ar(out.length)})`:''}`]];
+  $('#stockFilters').innerHTML = F.map(([k,n])=>`<button class="mini ${stockFilter===k?'on':''}" data-stf="${k}">${n}</button>`).join('');
+  const q = normAr(($('#stockInp')||{value:''}).value.trim());
+  const row = n => { const s = S.stock[n]||{}, have = inStock(n), star = S.staples.includes(n);
+    return `<div class="st-row ${have?'':'out'}"><button class="st-n" data-sted="${esc(n)}">${star?'<i>⭐</i>':''}${esc(n)}${(S.expiry||[]).some(x=>x.n===n && xDiff(x)<=3)?' <i title="قارب على الانتهاء">⏳</i>':''}</button>
+      ${have ? `<button class="st-b" data-stq="-" data-n="${esc(n)}" aria-label="أقل">−</button><span class="st-q">${s.q?qtyTxt(s.q,s.u):'متوفر'}</span><button class="st-b" data-stq="+" data-n="${esc(n)}" aria-label="أكثر">+</button>`
+        : `<button class="st-add" data-stshop="${esc(n)}">${S.shop.some(i=>i.n===n && !i.done)?'✓ في القائمة':'+ للتسوق'}</button>`}</div>`; };
+  let names;
+  if (stockFilter==='out') names = out.concat(S.pantry.length ? [] : []);
+  else { names = S.pantry.slice(); if (stockFilter==='star') names = S.staples.slice(); }
+  if (q) names = names.filter(n=>normAr(n).includes(q));
+  if (stockFilter==='food') names = names.filter(n=>catByK(detectCat(n).k).food);
+  if (stockFilter==='home') names = names.filter(n=>!catByK(detectCat(n).k).food);
+  const order = CATS_ALL().map(c=>c.k), map = {};
+  names.forEach(n=>{ const k = detectCat(n).k; (map[k] = map[k]||[]).push(n); });
+  const keys = Object.keys(map).sort((a,b)=>order.indexOf(a)-order.indexOf(b));
+  $('#stockList').innerHTML = (stockFilter==='out' && out.length ? `<button class="btn soft block" data-alloutshop style="margin-bottom:10px">🛒 أضف كل الأساسيات الناقصة للتسوق (${ar(out.length)})</button>` : '') +
+    (keys.length ? keys.map(k=>{ const c = catByK(k); return `<div class="st-cat"><div class="shop-sec">${c.e} ${esc(c.n)} <small>${ar(map[k].length)}</small></div>${map[k].sort((a,b)=>a.localeCompare(b,'ar')).map(row).join('')}</div>`; }).join('')
+    : `<div class="card empty"><span class="e">${stockFilter==='out'?'🎉':'🧺'}</span>${stockFilter==='out'?'لا ينقصك أي صنف أساسي':q?'لا يوجد في المخزون — اضغط «أضف» لإضافته':'المخزون فارغ — أضف ما عندك أو استخدم «تحديث سريع»'}</div>`);
+  $('#stockCount').textContent = ar(S.pantry.length);
+}
+function stockStep(n, dir){
+  const s = S.stock[n] = S.stock[n] || {q:0, u:''}, step = qStep(s.u);
+  if (dir > 0){ s.q = Math.round(((s.q||0) + step)*1000)/1000; s.t = Date.now(); save(); renderStock(); buzz(6); return; }
+  if ((s.q||0) > step){ s.q = Math.round((s.q - step)*1000)/1000; save(); renderStock(); buzz(6); return; }
+  const snap = JSON.stringify({p:S.pantry, s:S.stock, sh:S.shop});
+  stockOut(n); let auto = false;
+  if (S.staples.includes(n)){ auto = addToShop([n]) > 0; }
+  save(); renderStock(); updateBadge(); buzz(12);
+  toast(auto ? `«${n}» خلص — أضيف لقائمة التسوق 🛒` : `«${n}» خلص`, auto ? {label:'تراجع', fn:()=>{ const o = JSON.parse(snap); S.pantry = o.p; S.stock = o.s; S.shop = o.sh; save(); render(); }} : {label:'🛒 للتسوق', fn:()=>{ addToShop([n]); renderStock(); updateBadge(); toast('أضيف لقائمة التسوق ✓'); }});
+}
+function openQuickStock(){
+  sheet(`<h3>⚡ تحديث سريع للمخزون</h3><p class="lead">اضغط على المتوفر عندك (الأخضر = متوفر)</p>
+    <input class="inp search" id="qsInp" placeholder="🔍 ابحث عن صنف…" style="width:100%;margin-bottom:8px"><div id="qsList"></div><button class="btn primary block" data-close style="margin-top:10px">تم</button>`);
+  const draw = () => { const q = normAr($('#qsInp').value.trim());
+    $('#qsList').innerHTML = CATS_ALL().filter(c=>c.items.length || c.k==='other').map(c=>{
+      const items = [...new Set(c.items.concat(S.pantry.filter(p=>detectCat(p).k===c.k)))].filter(i=>!q || normAr(i).includes(q)); if (!items.length) return '';
+      const on = items.filter(inStock).length;
+      return `<details class="qs-cat" ${q || c.food && on ? 'open':''}><summary>${c.e} ${esc(c.n)} <small>${ar(on)} من ${ar(items.length)}</small></summary><div class="chips" style="margin-top:6px">${items.map(i=>`<button class="chip ${inStock(i)?'on':''}" data-qs="${esc(i)}">${esc(i)}</button>`).join('')}</div></details>`; }).join(''); };
+  $('#qsInp').addEventListener('input', draw); draw();
+}
+
+/* ---------- what can I cook? (from stock / new ideas) ---------- */
+let ciTab = 'have', ciGroup = '', ciSel = [];
+function openCookIdeas(tab){ if (tab) ciTab = tab; ciSel = []; sheet(`<h3>🍳 ماذا أطبخ؟</h3><p class="lead">اقتراحات حسب ما في مخزونك الآن</p><div class="seg" id="ciSeg"></div><div class="mf" id="ciGroups"></div><div id="ciList"></div><div id="ciBar"></div>`); renderCookIdeas(); }
+function renderCookIdeas(){
+  if (!$('#ciList')) return;
+  const all = RGROUPS.flatMap(g=>allRecipes(g.k).map(r=>Object.assign({k:g.k}, r))).filter(r=>!ciGroup || r.k===ciGroup);
+  const have = all.filter(r=>!missingOf(r).length).sort((a,b)=>(S.fav.includes(b.n)-S.fav.includes(a.n)) || a.m-b.m);
+  const fresh = all.map(r=>({r, miss:missingOf(r)})).filter(x=>x.miss.length>=1 && x.miss.length<=3).sort((a,b)=>a.miss.length-b.miss.length || (S.fav.includes(b.r.n)-S.fav.includes(a.r.n)) || a.r.m-b.r.m);
+  $('#ciSeg').innerHTML = `<button class="${ciTab==='have'?'on':''}" data-cit="have">✅ من مخزونك (${ar(have.length)})</button><button class="${ciTab==='new'?'on':''}" data-cit="new">💡 أفكار جديدة (${ar(fresh.length)})</button>`;
+  $('#ciGroups').innerHTML = [['','الكل'], ...RGROUPS.map(x=>[x.k, `${x.e} ${x.n}`])].map(([k,n])=>`<button class="mini ${ciGroup===k?'on':''}" data-cig="${k}">${n}</button>`).join('');
+  const gp = k => RGROUPS.find(g=>g.k===k) || RGROUPS[1];
+  if (ciTab==='have'){
+    $('#ciList').innerHTML = have.length ? `<p class="ci-hint">كل مكونات هذه الوصفات متوفرة عندك ✓</p>` + have.slice(0,60).map(r=>`<div class="ci-card"><span class="ci-e" style="background:${gp(r.k).bg}">${gp(r.k).e}</span><button class="ci-t" data-recipe="${esc(r.n)}"><b>${S.fav.includes(r.n)?'❤️ ':''}${esc(r.n)}</b><small>${gp(r.k).n} — ⏱️ ${ar(r.m)} دقيقة</small></button>${MEAL_KEYS.includes(r.k)?`<button class="ci-act" data-ciplan="${r.k}|${esc(r.n)}" aria-label="ضعها في خطة اليوم">📅</button>`:''}<button class="ci-act" data-cook="${esc(r.n)}" aria-label="اطبخها الآن">👩‍🍳</button></div>`).join('')
+      : `<div class="card empty"><span class="e">🧺</span>لا توجد وصفة مكوناتها كاملة في مخزونك${ciGroup?' في هذا القسم':''}.<br>جرّب «💡 أفكار جديدة» أو حدّث المخزون.</div>`;
+    $('#ciBar').innerHTML = '';
+  } else {
+    $('#ciList').innerHTML = fresh.length ? `<p class="ci-hint">تحتاج شراء صنف إلى ٣ أصناف فقط. اختر ما يعجبك وسنجمع لك الناقص.</p>` + fresh.slice(0,60).map(({r,miss})=>`<div class="ci-card ${ciSel.includes(r.n)?'sel':''}"><button class="ci-sel" data-cisel="${esc(r.n)}" aria-label="اختيار">${ciSel.includes(r.n)?'✓':''}</button><button class="ci-t" data-recipe="${esc(r.n)}"><b>${esc(r.n)}</b><small>${gp(r.k).e} ${gp(r.k).n} — ⏱️ ${ar(r.m)} د — متوفر ${ar(r.i.length-miss.length)} من ${ar(r.i.length)}</small><span class="ci-miss">${miss.map(m=>`<i>+ ${esc(m)}</i>`).join('')}</span></button></div>`).join('')
+      : `<div class="card empty"><span class="e">💡</span>لا توجد أفكار تحتاج ٣ أصناف أو أقل${ciGroup?' في هذا القسم':''}.</div>`;
+    renderCiBar();
+  }
+}
+function ciNeeds(){ const map = {}; ciSel.forEach(n=>{ const r = findRecipe(n); if (r) missingOf(r).forEach(m=>{ (map[m] = map[m]||[]).push(n); }); }); return map; }
+function renderCiBar(){
+  const bar = $('#ciBar'); if (!bar) return;
+  if (!ciSel.length){ bar.innerHTML = ''; return; }
+  const need = ciNeeds(), keys = Object.keys(need);
+  bar.innerHTML = `<div class="ci-bar"><b>اخترت ${ar(ciSel.length)} ${ciSel.length===1?'أكلة':'أكلات'} — تحتاج ${ar(keys.length)} ${keys.length===1?'صنفاً':'أصناف'}:</b>
+    <ul class="ci-need">${keys.map(m=>`<li><span>${esc(m)}</span><small>لـ ${esc(need[m].join('، '))}</small></li>`).join('')}</ul>
+    <div class="row2"><button class="btn soft" data-ciplanall>📅 وزّعها</button><button class="btn primary" data-cishop>🛒 للتسوق (${ar(keys.length)})</button></div></div>`;
+}
+function ciShopAll(){
+  let n = 0; ciSel.forEach(name=>{ const r = findRecipe(name); if (r) n += addToShop(missingOf(r), {r:name}); });
+  if (n){ inc('ideas'); save(); checkAch(); } updateBadge(); return n;
+}
+function ciPlanAll(){
+  let placed = 0, skipped = 0;
+  ciSel.forEach(name=>{ const r = findRecipe(name); if (!r) return; if (!MEAL_KEYS.includes(r.k)){ skipped++; return; }
+    for (let i=0;i<14;i++){ const k = addDays(today(), i), m = S.meals[k]||{}; if (!m[r.k]){ setMeal(k, r.k, r.n); placed++; return; } } });
+  return {placed, skipped};
+}
+
+/* ---------- home & meals cards ---------- */
+function renderPantry(){
+  const box = $('#pantryBox'); if (!box) return;
+  const ready = readyRecipes().length, out = staplesOut();
+  box.innerHTML = `<div class="sc-top"><span class="sc-e">🧺</span><div class="sc-t"><b>مخزونك: ${ar(S.pantry.length)} صنف</b><small>${ar(ready)} وصفة مكوناتها كاملة عندك${out.length?` — ⭐ ${ar(out.length)} أساسي ناقص`:''}</small></div></div>
+    <div class="row2"><button class="btn primary" data-cookideas>🍳 ماذا أطبخ؟</button><button class="btn soft" data-gostock>🧺 المخزون</button></div>`;
+}
+function renderHomeV43(){
+  const b = $('#cookNow'); if (!b) return;
+  const ready = readyRecipes().length, out = staplesOut();
+  b.innerHTML = `<span class="rd-e" style="background:var(--sage-l)">🧺</span><span class="rd-t"><b>${ready ? `${ar(ready)} وصفة تقدر تطبخها الآن` : 'حدّث مخزونك لنقترح عليك'}</b><small>من مخزونك (${ar(S.pantry.length)} صنف)${out.length?` — ⭐ ناقص: ${esc(out.slice(0,3).join('، '))}${out.length>3?'…':''}`:''}</small></span><span class="rd-go">‹</span>`;
+}
+
+/* ---------- events ---------- */
+wireAdd('shop'); wireAdd('stock');
+$('#shopSugg').addEventListener('click', e=>{ if (e.target.closest('[data-qmore]')){ e.stopPropagation(); shopSuggAll = true; renderShop(); } }, true);
+$('#shopSeg').addEventListener('click', e=>{ const b = e.target.closest('[data-sv]'); if (b){ buzz(6); setShopView(b.dataset.sv); } });
+$('#shopForm').onsubmit = e => {
+  e.preventDefault(); const items = takeAdd('shop'); if (!items) return;
+  const n = addToShop(items.reverse()); renderShop(); buzz(8);
+  if (!n) toast('موجود بالفعل في القائمة'); else if (items.length===1){ const c = catByK(items[0].g); toast(`أضيف إلى ${c.e} ${c.n}`); }
+};
+$('#stockForm').onsubmit = e => {
+  e.preventDefault(); const items = takeAdd('stock'); if (!items) return;
+  items.forEach(p=>{ stockAdd(p.n, p.q, p.u); });
+  save(); stockFilter = 'all'; renderStock(); buzz(8);
+  toast(items.length===1 ? `«${items[0].n}» في المخزون${items[0].q?` (${qtyTxt(items[0].q, items[0].u)})`:''} ✓` : `أضيف ${ar(items.length)} أصناف للمخزون ✓`);
+};
+$('#stockInp').addEventListener('input', ()=>renderStock());
+$('#stockPane').addEventListener('click', e=>{
+  const g = s => e.target.closest(s); let b;
+  if ((b = g('[data-stf]'))){ stockFilter = b.dataset.stf; renderStock(); return; }
+  if ((b = g('[data-stq]'))){ stockStep(b.dataset.n, b.dataset.stq==='+' ? 1 : -1); return; }
+  if ((b = g('[data-sted]'))){ openItemEdit('stock', b.dataset.sted); return; }
+  if ((b = g('[data-stshop]'))){ const n = addToShop([b.dataset.stshop]); updateBadge(); renderStock(); toast(n?'أضيف لقائمة التسوق 🛒':'موجود بالفعل في القائمة'); return; }
+  if (g('[data-alloutshop]')){ const n = addToShop(staplesOut()); updateBadge(); renderStock(); toast(`أضيف ${ar(n)} للقائمة 🛒`); return; }
+  if (g('[data-quickstock]')){ openQuickStock(); return; }
+  if (g('[data-cookideas]')){ openCookIdeas('have'); return; }
+});
+$('#shopList').addEventListener('click', e=>{ const b = e.target.closest('[data-sedit]'); if (b){ e.stopPropagation(); openItemEdit('shop', b.dataset.sedit); } }, true);
+$('#pantryBox').addEventListener('click', e=>{
+  if (e.target.closest('[data-cookideas]')) openCookIdeas('have');
+  else if (e.target.closest('[data-gostock]')){ go('shop'); setShopView('stock'); }
+});
+$('#cookNow') && $('#cookNow').addEventListener('click', ()=>{ buzz(8); openCookIdeas('have'); });
+$('#genMode') && $('#genMode').addEventListener('click', e=>{ const b = e.target.closest('[data-gm]'); if (!b) return; S.genMode = b.dataset.gm; save(); renderGenMode(); buzz(6); });
+function renderGenMode(){ $$('#genMode [data-gm]').forEach(b=>b.classList.toggle('on', b.dataset.gm===(S.genMode||'stock'))); }
+$('#genSheet').addEventListener('click', e=>{
+  const g = s => e.target.closest(s); let b;
+  if ((b = g('[data-qs]'))){ e.stopPropagation(); const n = b.dataset.qs; if (inStock(n)) stockOut(n); else stockAdd(n, 0, ''); save(); b.classList.toggle('on', inStock(n)); buzz(6); const sm = b.closest('details').querySelector('summary small'); if (sm){ const all = b.closest('details').querySelectorAll('[data-qs]'); sm.textContent = `${ar([...all].filter(x=>x.classList.contains('on')).length)} من ${ar(all.length)}`; } return; }
+  if ((b = g('[data-cit]'))){ e.stopPropagation(); ciTab = b.dataset.cit; renderCookIdeas(); return; }
+  if ((b = g('[data-cig]'))){ e.stopPropagation(); ciGroup = b.dataset.cig; renderCookIdeas(); return; }
+  if ((b = g('[data-cisel]'))){ e.stopPropagation(); const n = b.dataset.cisel; ciSel = ciSel.includes(n) ? ciSel.filter(x=>x!==n) : ciSel.concat(n); buzz(6); b.closest('.ci-card').classList.toggle('sel', ciSel.includes(n)); b.textContent = ciSel.includes(n)?'✓':''; renderCiBar(); return; }
+  if (g('[data-cishop]')){ e.stopPropagation(); const n = ciShopAll(); toast(n ? `أضيف ${ar(n)} للقائمة 🛒 — مع اسم كل أكلة` : 'كل الناقص موجود في القائمة'); return; }
+  if (g('[data-ciplanall]')){ e.stopPropagation(); const {placed, skipped} = ciPlanAll(); toast(placed ? `وُضعت ${ar(placed)} في خطة الأيام القادمة 📅${skipped?` (${ar(skipped)} ليست وجبة رئيسية)`:''}` : 'اختر وجبات فطور أو غداء أو عشاء'); return; }
+  if ((b = g('[data-ciplan]'))){ e.stopPropagation(); const [k, n] = b.dataset.ciplan.split('|'); setMeal(today(), k, n); buzz(10); toast(`«${n}» في ${MEALS.find(x=>x.k===k).n} اليوم ✓`); return; }
+  if (g('[data-cookideas]')){ e.stopPropagation(); openCookIdeas('have'); return; }
+}, true);
+/* migrate shop items: category + canonical name once */
+S.shop.forEach(i=>{ if (!i.g) i.g = detectCat(i.n).k; });
+['shop','stock'].forEach(p=>{ const el = $('#'+p+'Cats'); if (el) el.innerHTML = CATS_ALL().map(c=>`<button type="button" class="mini" data-${p}cat="${c.k}">${c.e} ${c.n}</button>`).join(''); });
+
 function render(){
   if (tab==='home') renderHome();
   else if (tab==='tasks') renderTasks();
   else if (tab==='meals') renderMeals();
-  else if (tab==='shop') renderShop();
+  else if (tab==='shop') { if (shopView==='stock') renderStock(); else renderShop(); }
   else if (tab==='budget') renderBudget();
   updateBadge();
 }

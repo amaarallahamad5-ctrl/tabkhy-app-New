@@ -95,6 +95,7 @@
     </div>
     <div class="sec-title"><h2>🍲 وصفة اليوم</h2></div>
     <button class="card rday" id="rDay" hidden></button>
+    <button class="card rday" id="cookNow"></button>
     <div class="sec-title"><h2>نصيحة اليوم</h2><span id="tipNo"></span></div>
     <div class="card tip"><span class="ti" id="tipE">💡</span><div><b>جرّب اليوم</b><p id="tipText"></p></div></div>
   </section>
@@ -154,34 +155,46 @@
       <button id="mNext" aria-label="اليوم التالي"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="m15 6-6 6 6 6"/></svg></button>
     </div>
     <div id="mealList"></div>
+    <div class="seg gen-mode" id="genMode"><button data-gm="stock">🧺 من مخزوني فقط</button><button data-gm="new">💡 أفكار جديدة</button></div>
     <div class="gen-row">
       <button class="gen-btn" id="genBtn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>اقترح لهذا اليوم</button>
       <button class="week-btn" id="genWeek">خطة أسبوع</button>
     </div>
     <button class="btn ghost block" id="missToShop" hidden style="margin:-6px 0 16px">🛒 أضف المكونات الناقصة لقائمة التسوق</button>
-    <details class="card pantry" id="pantryBox">
-      <summary><span>🧺 مخزون المطبخ <small style="color:var(--muted);font-weight:500" id="pantryCount"></small></span><svg class="car" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></summary>
-      <p style="margin:6px 0 0;color:var(--muted);font-size:14px">اختر المتوفر عندك، وسنقترح وجبات منه.</p>
-      <div id="pantryChips"></div>
-    </details>
+    <div class="card stock-card" id="pantryBox"></div>
     <div class="row2"><button class="btn ghost" id="browseBtn">📖 كل الوصفات</button><button class="btn ghost" id="addRecipeBtn">✍️ أضف وصفتك</button></div>
   </section>
 
   <!-- SHOP -->
   <section class="view" id="v-shop">
+    <div class="seg" id="shopSeg"><button data-sv="list" class="on">🛒 قائمة التسوق <b class="segc" id="shopCountSeg"></b></button><button data-sv="stock">🧺 المخزون <b class="segc" id="stockCount"></b></button></div>
+    <div id="shopPane">
     <form class="add-card" id="shopForm" autocomplete="off" style="margin-top:0">
       <div class="add-row" style="margin:0">
-        <input class="inp" id="shopInp" placeholder="ماذا تحتاج أن تشتري؟" maxlength="40">
+        <input class="inp" id="shopInp" placeholder="ماذا تشتري؟ مثال: ٢ كيلو طماطم" maxlength="60">
         <button class="btn primary" type="submit" aria-label="إضافة" style="background:var(--sky-d)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
       </div>
+      <div class="add-prev" id="shopPrev" hidden></div><div class="cat-pick" id="shopCats" hidden></div>
       <div class="chips sugg" id="shopSugg" style="margin-top:0"></div>
     </form>
     <div class="shop-head"><h2>القائمة <small style="color:var(--muted);font-size:15px" id="shopCount"></small></h2>
       <button class="sm-btn" id="shareShop">📤 مشاركة</button>
       <button class="sm-btn" id="clearShop">🧹 حذف المشترى</button>
     </div>
+    <div class="shop-est" id="shopEst" hidden></div>
     <div id="shopList"></div>
-    <p style="text-align:center;color:var(--muted);font-size:14px;margin-top:14px">عند شراء صنف من أصناف المطبخ، يُضاف تلقائياً إلى المخزون 🧺</p>
+    <p class="shop-foot">✓ عند شراء أي صنف ينتقل تلقائياً إلى المخزون بكميته 🧺</p>
+    </div>
+    <div id="stockPane" hidden>
+      <div class="stock-sum" id="stockSum"></div>
+      <form class="add-card" id="stockForm" autocomplete="off" style="margin-top:0">
+        <div class="add-row" style="margin:0"><input class="inp" id="stockInp" placeholder="ابحث أو أضف: ٢ كيلو أرز" maxlength="60"><button class="btn primary" type="submit" aria-label="أضف للمخزون" style="background:var(--sage-d)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button></div>
+        <div class="add-prev" id="stockPrev" hidden></div><div class="cat-pick" id="stockCats" hidden></div>
+      </form>
+      <div class="mf" id="stockFilters"></div>
+      <button class="btn ghost block" data-quickstock style="margin-bottom:12px">⚡ تحديث سريع — اختر المتوفر من القائمة</button>
+      <div id="stockList"></div>
+    </div>
   </section>
 
   <!-- BUDGET -->
